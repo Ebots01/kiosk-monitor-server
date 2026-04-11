@@ -4,6 +4,15 @@ let connectedKiosks = {};
 module.exports = function(io) {
     io.on('connection', (socket) => {
         console.log('New Dashboard Connection:', socket.id);
+        socket.on('ui_request_shutdown', (data) => {
+    const kioskSocketId = connectedKiosks[data.kioskId];
+    if (kioskSocketId) {
+        console.log(`Sending shutdown command to: ${data.kioskId}`);
+        io.to(kioskSocketId).emit('shutdown_command');
+    } else {
+        socket.emit('ui_error', 'Cannot shutdown: Kiosk is offline');
+          }
+        });
 
         socket.on('register_kiosk', (data) => {
             connectedKiosks[data.kioskId] = socket.id;
