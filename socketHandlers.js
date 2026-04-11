@@ -21,19 +21,21 @@ module.exports = function(io) {
         });
 
         socket.on('poll_response', (data) => {
-            const today = new Date().toISOString().split('T')[0];
-            const yesterdayDate = new Date();
-            yesterdayDate.setDate(yesterdayDate.getDate() - 1);
-            const yesterday = yesterdayDate.toISOString().split('T')[0];
+            // Calculate Today and Yesterday dynamically
+            const todayObj = new Date();
+            const today = todayObj.getFullYear() + '-' + String(todayObj.getMonth() + 1).padStart(2, '0') + '-' + String(todayObj.getDate()).padStart(2, '0');
+            
+            const yesterdayObj = new Date();
+            yesterdayObj.setDate(yesterdayObj.getDate() - 1);
+            const yesterday = yesterdayObj.getFullYear() + '-' + String(yesterdayObj.getMonth() + 1).padStart(2, '0') + '-' + String(yesterdayObj.getDate()).padStart(2, '0');
 
             let todayStats = { pages: 0, revenue: 0 };
             let yesterdayStats = { pages: 0, revenue: 0 };
             let history = {};
 
-            // Process logs sent directly from Kiosk
             if (data.logs) {
                 data.logs.forEach(log => {
-                    const logDate = log.date; // Format: YYYY-MM-DD
+                    const logDate = log.date; 
                     
                     if (logDate === today) {
                         todayStats.pages += log.pages;
@@ -43,26 +45,25 @@ module.exports = function(io) {
                         yesterdayStats.revenue += log.amount;
                     }
 
-                    // Group everything for the "Date-wise check"
                     if (!history[logDate]) history[logDate] = { pages: 0, revenue: 0 };
                     history[logDate].pages += log.pages;
                     history[logDate].revenue += log.amount;
                 });
             }
 
-            // Send everything to the UI
             io.emit('ui_update', {
                 kioskId: data.kioskId,
                 status: 'Online',
                 hardware: {
                     wifi: data.wifi ? 'Connected' : 'Disconnected',
-                    printer: data.printer ? 'Online' : 'Offline'
+                    printer: data.printer ? 'Ready' : 'Offline'
                 },
                 stats: {
                     today: todayStats,
                     yesterday: yesterdayStats,
                     history: history
-                }
+                },
+                excelFile: data.excel_file // Forward the file to the UI
             });
         });
 
