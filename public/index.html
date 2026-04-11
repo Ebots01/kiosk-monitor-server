@@ -177,6 +177,12 @@
             pollBtn.disabled = false;
             document.getElementById('error-msg').innerText = msg;
         });
+        function requestShutdown() {
+            const confirmPowerOff = confirm("⚠️ WARNING: This will immediately turn off the Kiosk hardware. Proceed?");
+             if (confirmPowerOff) {
+               socket.emit('ui_request_shutdown', { kioskId: targetKiosk });
+                 }
+               }
 
         function pollKiosk() {
             const pollBtn = document.getElementById('poll-btn');
