@@ -1,114 +1,76 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Smart Printer Dashboard</title>
-    <link rel="stylesheet" href="style.css">
-    <script src="/socket.io/socket.io.js"></script>
-</head>
-<body>
-
-    <div class="dashboard">
-        <div class="card">
-            <h2><span id="kiosk-id">kiosk_ggv_01</span></h2>
-            <div id="kiosk-status" class="badge offline">Offline</div>
-            
-            <div class="hardware-status">
-                <p><strong>Wi-Fi:</strong> <span id="wifi-status">Unknown</span></p>
-                <p><strong>Printer:</strong> <span id="printer-status">Unknown</span></p>
-            </div>
-            
-            <p class="sync-text" id="sync-status">Awaiting check...</p>
-            <button id="poll-btn" onclick="pollKiosk()">Check Status & Sync</button>
+<div class="dashboard">
+    <div class="card status-card">
+        <h2><span id="kiosk-id">Kiosk GGV 01</span> <div id="kiosk-status" class="badge offline">Offline</div></h2>
+        <div class="hardware-status">
+            <p><strong>Wi-Fi:</strong> <span id="wifi-status">--</span></p>
+            <p><strong>Printer:</strong> <span id="printer-status">--</span></p>
         </div>
+        <button id="poll-btn" onclick="pollKiosk()">Refresh All Data</button>
+    </div>
 
-        <div class="card log-card">
-            <h2>Daily Print Summary</h2>
-            <table id="logs-table">
-                <thead>
-                    <tr>
-                        <th>Date</th>
-                        <th>Pages Printed</th>
-                        <th>Revenue</th>
-                    </tr>
-                </thead>
-                <tbody id="logs-body">
-                    <tr><td colspan="3">No logs available</td></tr>
-                </tbody>
-            </table>
+    <div class="stats-row">
+        <div class="card mini-card">
+            <h3>Today</h3>
+            <p id="today-pages">0 Pages</p>
+            <p id="today-rev">₹0.00</p>
+        </div>
+        <div class="card mini-card">
+            <h3>Yesterday</h3>
+            <p id="yesterday-pages">0 Pages</p>
+            <p id="yesterday-rev">₹0.00</p>
         </div>
     </div>
 
-    <script>
-        const socket = io();
-        const targetKiosk = "kiosk_ggv_01"; // Must match the ID in your Flutter app
+    <div class="card log-card">
+        <h2>History (Date-wise)</h2>
+        <table>
+            <thead><tr><th>Date</th><th>Pages</th><th>Revenue</th></tr></thead>
+            <tbody id="history-body"></tbody>
+        </table>
+    </div>
+</div>
 
-        socket.on('ui_update', (data) => {
-            if (data.kioskId !== targetKiosk) return;
+<script>
+    const socket = io();
+    const targetKiosk = "GGV_KIOSK_01"; // Must match your Flutter kioskId
 
-            // Update Status Badge
-            if (data.status) {
-                const statusEl = document.getElementById('kiosk-status');
-                statusEl.innerText = data.status;
-                statusEl.className = 'badge ' + (data.status === 'Online' ? 'online' : 'offline');
-            }
+    socket.on('ui_update', (data) => {
+        if (data.kioskId !== targetKiosk) return;
 
-            // Update Hardware Text
-            if (data.hardware) {
-                document.getElementById('wifi-status').innerText = data.hardware.wifi;
-                document.getElementById('printer-status').innerText = data.hardware.printer;
-            }
-
-            // Update Sync Text
-            if (data.logsSynced !== undefined) {
-                document.getElementById('sync-status').innerText = 
-                    data.logsSynced > 0 
-                    ? `Just synced ${data.logsSynced} new jobs (${data.pagesSynced} pages).`
-                    : `Checked successfully. No new print jobs.`;
-            }
-
-            document.getElementById('poll-btn').innerText = "Check Status & Sync";
-            document.getElementById('poll-btn').disabled = false;
-        });
-
-        socket.on('ui_logs_table', (rows) => {
-            const tbody = document.getElementById('logs-body');
-            tbody.innerHTML = '';
-            
-            if(rows.length === 0) {
-                tbody.innerHTML = '<tr><td colspan="3">No logs available</td></tr>';
-                return;
-            }
-
-            rows.forEach(row => {
-                const tr = document.createElement('tr');
-                tr.innerHTML = `
-                    <td><strong>${row.dateStr}</strong></td>
-                    <td>${row.total_pages} pages</td>
-                    <td>₹${row.total_cost.toFixed(2)}</td>
-                `;
-                tbody.appendChild(tr);
-            });
-        });
-
-        socket.on('ui_error', (msg) => {
-            alert(msg);
-            document.getElementById('poll-btn').innerText = "Check Status & Sync";
-            document.getElementById('poll-btn').disabled = false;
-        });
-
-        function pollKiosk() {
-            const btn = document.getElementById('poll-btn');
-            btn.innerText = "Polling app...";
-            btn.disabled = true;
-            document.getElementById('sync-status').innerText = "Waiting for kiosk response...";
-            
-            socket.emit('ui_request_poll', { kioskId: targetKiosk });
-            
-            // Re-enable button after 5 seconds if kiosk doesn't reply
-            setTimeout(() => { btn.disabled = false; btn.innerText = "Check Status & Sync"; }, 5000);
+        // 1. Update Status & Hardware
+        const statusEl = document.getElementById('kiosk-status');
+        statusEl.innerText = data.status;
+        statusEl.className = 'badge ' + data.status.toLowerCase();
+        
+        if(data.hardware) {
+            document.getElementById('wifi-status').innerText = data.hardware.wifi;
+            document.getElementById('printer-status').innerText = data.hardware.printer;
         }
-    </script>
-</body>
-</html>
+
+        // 2. Update Today/Yesterday Stats
+        if(data.stats) {
+            document.getElementById('today-pages').innerText = `${data.stats.today.pages} Pages`;
+            document.getElementById('today-rev').innerText = `₹${data.stats.today.revenue.toFixed(2)}`;
+            
+            document.getElementById('yesterday-pages').innerText = `${data.stats.yesterday.pages} Pages`;
+            document.getElementById('yesterday-rev').innerText = `₹${data.stats.yesterday.revenue.toFixed(2)}`;
+
+            // 3. Update History Table
+            const tbody = document.getElementById('history-body');
+            tbody.innerHTML = '';
+            Object.keys(data.stats.history).sort().reverse().forEach(date => {
+                const row = data.stats.history[date];
+                tbody.innerHTML += `<tr><td>${date}</td><td>${row.pages}</td><td>₹${row.revenue.toFixed(2)}</td></tr>`;
+            });
+        }
+        
+        document.getElementById('poll-btn').innerText = "Refresh All Data";
+        document.getElementById('poll-btn').disabled = false;
+    });
+
+    function pollKiosk() {
+        document.getElementById('poll-btn').innerText = "Fetching from App...";
+        document.getElementById('poll-btn').disabled = true;
+        socket.emit('ui_request_poll', { kioskId: targetKiosk });
+    }
+</script>
