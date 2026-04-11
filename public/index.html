@@ -1,76 +1,199 @@
-<div class="dashboard">
-    <div class="card status-card">
-        <h2><span id="kiosk-id">Kiosk GGV 01</span> <div id="kiosk-status" class="badge offline">Offline</div></h2>
-        <div class="hardware-status">
-            <p><strong>Wi-Fi:</strong> <span id="wifi-status">--</span></p>
-            <p><strong>Printer:</strong> <span id="printer-status">--</span></p>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OneTapPrint Admin</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+
+    <nav class="navbar">
+        <div class="logo-area">
+            <i class="fa-solid fa-print"></i>
+            <h1>OneTapPrint Monitor</h1>
         </div>
-        <button id="poll-btn" onclick="pollKiosk()">Refresh All Data</button>
-    </div>
+        <div class="kiosk-id-badge">Target ID: <strong id="target-id-display">GGV_KIOSK_01</strong></div>
+    </nav>
 
-    <div class="stats-row">
-        <div class="card mini-card">
-            <h3>Today</h3>
-            <p id="today-pages">0 Pages</p>
-            <p id="today-rev">₹0.00</p>
-        </div>
-        <div class="card mini-card">
-            <h3>Yesterday</h3>
-            <p id="yesterday-pages">0 Pages</p>
-            <p id="yesterday-rev">₹0.00</p>
-        </div>
-    </div>
-
-    <div class="card log-card">
-        <h2>History (Date-wise)</h2>
-        <table>
-            <thead><tr><th>Date</th><th>Pages</th><th>Revenue</th></tr></thead>
-            <tbody id="history-body"></tbody>
-        </table>
-    </div>
-</div>
-
-<script>
-    const socket = io();
-    const targetKiosk = "GGV_KIOSK_01"; // Must match your Flutter kioskId
-
-    socket.on('ui_update', (data) => {
-        if (data.kioskId !== targetKiosk) return;
-
-        // 1. Update Status & Hardware
-        const statusEl = document.getElementById('kiosk-status');
-        statusEl.innerText = data.status;
-        statusEl.className = 'badge ' + data.status.toLowerCase();
+    <div class="dashboard">
         
-        if(data.hardware) {
-            document.getElementById('wifi-status').innerText = data.hardware.wifi;
-            document.getElementById('printer-status').innerText = data.hardware.printer;
-        }
+        <div class="top-row">
+            <div class="card status-card">
+                <div class="card-header">
+                    <h2><i class="fa-solid fa-server"></i> Machine Status</h2>
+                    <div id="kiosk-status" class="badge offline">Offline</div>
+                </div>
+                <div class="hardware-grid">
+                    <div class="hw-item">
+                        <i class="fa-solid fa-wifi text-blue"></i>
+                        <span>Wi-Fi:</span>
+                        <strong id="wifi-status">--</strong>
+                    </div>
+                    <div class="hw-item">
+                        <i class="fa-solid fa-print text-purple"></i>
+                        <span>Printer:</span>
+                        <strong id="printer-status">--</strong>
+                    </div>
+                </div>
+            </div>
 
-        // 2. Update Today/Yesterday Stats
-        if(data.stats) {
-            document.getElementById('today-pages').innerText = `${data.stats.today.pages} Pages`;
-            document.getElementById('today-rev').innerText = `₹${data.stats.today.revenue.toFixed(2)}`;
+            <div class="card action-card">
+                <h2><i class="fa-solid fa-bolt"></i> Quick Actions</h2>
+                <div class="action-buttons">
+                    <button id="poll-btn" class="btn btn-primary" onclick="pollKiosk()">
+                        <i class="fa-solid fa-arrows-rotate"></i> Sync Data
+                    </button>
+                    <button id="download-btn" class="btn btn-success" onclick="downloadExcel()" disabled>
+                        <i class="fa-solid fa-file-excel"></i> Download Excel
+                    </button>
+                </div>
+                <p id="error-msg" class="error-text"></p>
+            </div>
+        </div>
+
+        <div class="stats-row">
+            <div class="card stat-card today">
+                <h3>Today</h3>
+                <div class="stat-content">
+                    <div class="stat-item">
+                        <i class="fa-solid fa-file-lines"></i>
+                        <span id="today-pages">0</span> Pages
+                    </div>
+                    <div class="stat-item highlight">
+                        <i class="fa-solid fa-indian-rupee-sign"></i>
+                        <span id="today-rev">0.00</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card stat-card yesterday">
+                <h3>Yesterday</h3>
+                <div class="stat-content">
+                    <div class="stat-item">
+                        <i class="fa-solid fa-file-lines"></i>
+                        <span id="yesterday-pages">0</span> Pages
+                    </div>
+                    <div class="stat-item highlight">
+                        <i class="fa-solid fa-indian-rupee-sign"></i>
+                        <span id="yesterday-rev">0.00</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card table-card">
+            <h2><i class="fa-solid fa-clock-rotate-left"></i> Print History (Date-wise)</h2>
+            <div class="table-responsive">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Total Pages</th>
+                            <th>Revenue Collected</th>
+                        </tr>
+                    </thead>
+                    <tbody id="history-body">
+                        <tr><td colspan="3" class="empty-state">No data synced yet. Click 'Sync Data'.</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        const socket = io();
+        
+        // Ensure this matches the ID in your Flutter App!
+        const targetKiosk = "csjmu_01"; 
+        document.getElementById('target-id-display').innerText = targetKiosk;
+
+        let latestExcelBase64 = null;
+
+        socket.on('ui_update', (data) => {
+            if (data.kioskId !== targetKiosk) return;
+
+            // 1. Status Badge
+            const statusEl = document.getElementById('kiosk-status');
+            statusEl.innerText = data.status;
+            statusEl.className = 'badge ' + data.status.toLowerCase();
             
-            document.getElementById('yesterday-pages').innerText = `${data.stats.yesterday.pages} Pages`;
-            document.getElementById('yesterday-rev').innerText = `₹${data.stats.yesterday.revenue.toFixed(2)}`;
+            // 2. Hardware Info
+            if(data.hardware) {
+                document.getElementById('wifi-status').innerText = data.hardware.wifi;
+                document.getElementById('printer-status').innerText = data.hardware.printer;
+            }
 
-            // 3. Update History Table
-            const tbody = document.getElementById('history-body');
-            tbody.innerHTML = '';
-            Object.keys(data.stats.history).sort().reverse().forEach(date => {
-                const row = data.stats.history[date];
-                tbody.innerHTML += `<tr><td>${date}</td><td>${row.pages}</td><td>₹${row.revenue.toFixed(2)}</td></tr>`;
-            });
+            // 3. Stats Update
+            if(data.stats) {
+                document.getElementById('today-pages').innerText = data.stats.today.pages;
+                document.getElementById('today-rev').innerText = data.stats.today.revenue.toFixed(2);
+                
+                document.getElementById('yesterday-pages').innerText = data.stats.yesterday.pages;
+                document.getElementById('yesterday-rev').innerText = data.stats.yesterday.revenue.toFixed(2);
+
+                const tbody = document.getElementById('history-body');
+                tbody.innerHTML = '';
+                
+                const dates = Object.keys(data.stats.history).sort().reverse();
+                if(dates.length === 0) {
+                    tbody.innerHTML = `<tr><td colspan="3" class="empty-state">No logs found on kiosk.</td></tr>`;
+                } else {
+                    dates.forEach(date => {
+                        const row = data.stats.history[date];
+                        tbody.innerHTML += `
+                            <tr>
+                                <td><strong>${date}</strong></td>
+                                <td>${row.pages}</td>
+                                <td class="text-green"><strong>₹${row.revenue.toFixed(2)}</strong></td>
+                            </tr>
+                        `;
+                    });
+                }
+            }
+
+            // 4. Excel File Storage
+            if(data.excelFile) {
+                latestExcelBase64 = data.excelFile;
+                document.getElementById('download-btn').disabled = false;
+            }
+            
+            // 5. Reset UI Buttons
+            const pollBtn = document.getElementById('poll-btn');
+            pollBtn.innerHTML = `<i class="fa-solid fa-arrows-rotate"></i> Sync Data`;
+            pollBtn.disabled = false;
+            document.getElementById('error-msg').innerText = '';
+        });
+
+        socket.on('ui_error', (msg) => {
+            const pollBtn = document.getElementById('poll-btn');
+            pollBtn.innerHTML = `<i class="fa-solid fa-arrows-rotate"></i> Sync Data`;
+            pollBtn.disabled = false;
+            document.getElementById('error-msg').innerText = msg;
+        });
+
+        function pollKiosk() {
+            const pollBtn = document.getElementById('poll-btn');
+            pollBtn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Fetching...`;
+            pollBtn.disabled = true;
+            document.getElementById('error-msg').innerText = '';
+            socket.emit('ui_request_poll', { kioskId: targetKiosk });
         }
-        
-        document.getElementById('poll-btn').innerText = "Refresh All Data";
-        document.getElementById('poll-btn').disabled = false;
-    });
 
-    function pollKiosk() {
-        document.getElementById('poll-btn').innerText = "Fetching from App...";
-        document.getElementById('poll-btn').disabled = true;
-        socket.emit('ui_request_poll', { kioskId: targetKiosk });
-    }
-</script>
+        function downloadExcel() {
+            if(!latestExcelBase64) return;
+            
+            // Convert base64 to a downloadable blob
+            const link = document.createElement('a');
+            link.href = 'data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,' + latestExcelBase64;
+            link.download = `Print_Logs_${targetKiosk}.xlsx`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+    </script>
+</body>
+</html>
