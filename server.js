@@ -1,10 +1,9 @@
+// server.js
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
 const cors = require('cors');
 
-// Import our custom modules
-const db = require('./database');
 const setupSocketHandlers = require('./socketHandlers');
 
 const app = express();
@@ -16,16 +15,15 @@ const server = http.createServer(app);
 // Initialize Socket.IO
 const io = new Server(server, {
     cors: {
-        origin: "*", // Allows your Flutter app to connect from anywhere
+        origin: "*", 
         methods: ["GET", "POST"]
     }
 });
 
-// Pass the IO instance and Database to our handlers
-setupSocketHandlers(io, db);
+// Pass ONLY the IO instance (Database removed)
+setupSocketHandlers(io);
 
-// Render sets the PORT automatically. Default to 3000 for local testing.
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
-    console.log(`🚀 Monitoring Server running on port ${PORT}`);
+    console.log(`🚀 OneTapPrint Server running on port ${PORT}`);
 });
