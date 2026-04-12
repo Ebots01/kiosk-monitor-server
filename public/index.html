@@ -33,24 +33,33 @@
                     </div>
                     <div class="hw-item">
                         <i class="fa-solid fa-print text-purple"></i>
-                        <span>Printer:</span>
+                        <span>Printer App Status:</span>
                         <strong id="printer-status">--</strong>
                     </div>
                 </div>
+
+                <div class="printer-terminal">
+                    <h4><i class="fa-solid fa-terminal"></i> CUPS Hardware Diagnostics</h4>
+                    <pre id="printer-logs-display">Click 'Sync Data' to fetch deep hardware logs (Jams, Ink, Queue)...</pre>
+                </div>
+
             </div>
 
             <div class="card action-card">
                 <h2><i class="fa-solid fa-bolt"></i> Quick Actions</h2>
                 <div class="action-buttons">
-                    <button id="shutdown-btn" class="btn btn-danger" onclick="requestShutdown()" style="background-color: #dc2626; margin-top: 10px;">
-                         <i class="fa-solid fa-power-off"></i> Shut Down Kiosk
-                      </button>
                     <button id="poll-btn" class="btn btn-primary" onclick="pollKiosk()">
                         <i class="fa-solid fa-arrows-rotate"></i> Sync Data
+                    </button>
+                    <button class="btn btn-warning" onclick="requestTestPrint()">
+                        <i class="fa-solid fa-file-invoice"></i> Force Test Print
                     </button>
                     <button id="download-btn" class="btn btn-success" onclick="downloadExcel()" disabled>
                         <i class="fa-solid fa-file-excel"></i> Download Excel
                     </button>
+                    <button id="shutdown-btn" class="btn btn-danger" onclick="requestShutdown()" style="background-color: #dc2626; margin-top: 10px;">
+                        <i class="fa-solid fa-power-off"></i> Shut Down Kiosk
+                     </button>
                 </div>
                 <p id="error-msg" class="error-text"></p>
             </div>
@@ -109,8 +118,6 @@
     <script src="/socket.io/socket.io.js"></script>
     <script>
         const socket = io();
-        
-        // Ensure this matches the ID in your Flutter App!
         const targetKiosk = "csjmu_01"; 
         document.getElementById('target-id-display').innerText = targetKiosk;
 
@@ -124,17 +131,19 @@
             statusEl.innerText = data.status;
             statusEl.className = 'badge ' + data.status.toLowerCase();
             
-            // 2. Hardware Info
+            // 2. Hardware Info & Deep Logs
             if(data.hardware) {
                 document.getElementById('wifi-status').innerText = data.hardware.wifi;
                 document.getElementById('printer-status').innerText = data.hardware.printer;
+                if(data.hardware.printer_details) {
+                    document.getElementById('printer-logs-display').innerText = data.hardware.printer_details;
+                }
             }
 
             // 3. Stats Update
             if(data.stats) {
                 document.getElementById('today-pages').innerText = data.stats.today.pages;
                 document.getElementById('today-rev').innerText = data.stats.today.revenue.toFixed(2);
-                
                 document.getElementById('yesterday-pages').innerText = data.stats.yesterday.pages;
                 document.getElementById('yesterday-rev').innerText = data.stats.yesterday.revenue.toFixed(2);
 
@@ -164,7 +173,6 @@
                 document.getElementById('download-btn').disabled = false;
             }
             
-            // 5. Reset UI Buttons
             const pollBtn = document.getElementById('poll-btn');
             pollBtn.innerHTML = `<i class="fa-solid fa-arrows-rotate"></i> Sync Data`;
             pollBtn.disabled = false;
@@ -177,25 +185,32 @@
             pollBtn.disabled = false;
             document.getElementById('error-msg').innerText = msg;
         });
+
         function requestShutdown() {
-            const confirmPowerOff = confirm("⚠️ WARNING: This will immediately turn off the Kiosk hardware. Proceed?");
-             if (confirmPowerOff) {
+            if (confirm("⚠️ WARNING: This will immediately turn off the Kiosk hardware. Proceed?")) {
                socket.emit('ui_request_shutdown', { kioskId: targetKiosk });
-                 }
-               }
+            }
+        }
+
+        // NEW: Test Print Trigger
+        function requestTestPrint() {
+            if (confirm("Send a remote test print to the Brother HL-2100?")) {
+               socket.emit('ui_request_test_print', { kioskId: targetKiosk });
+               alert("Test print command sent!");
+            }
+        }
 
         function pollKiosk() {
             const pollBtn = document.getElementById('poll-btn');
             pollBtn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Fetching...`;
             pollBtn.disabled = true;
             document.getElementById('error-msg').innerText = '';
+            document.getElementById('printer-logs-display').innerText = 'Fetching deep hardware logs from CUPS...';
             socket.emit('ui_request_poll', { kioskId: targetKiosk });
         }
 
         function downloadExcel() {
             if(!latestExcelBase64) return;
-            
-            // Convert base64 to a downloadable blob
             const link = document.createElement('a');
             link.href = 'data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,' + latestExcelBase64;
             link.download = `Print_Logs_${targetKiosk}.xlsx`;
