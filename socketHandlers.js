@@ -4,15 +4,6 @@ let connectedKiosks = {};
 module.exports = function(io) {
     io.on('connection', (socket) => {
         console.log('New Dashboard Connection:', socket.id);
-        socket.on('ui_request_shutdown', (data) => {
-    const kioskSocketId = connectedKiosks[data.kioskId];
-    if (kioskSocketId) {
-        console.log(`Sending shutdown command to: ${data.kioskId}`);
-        io.to(kioskSocketId).emit('shutdown_command');
-    } else {
-        socket.emit('ui_error', 'Cannot shutdown: Kiosk is offline');
-          }
-        });
 
         socket.on('register_kiosk', (data) => {
             connectedKiosks[data.kioskId] = socket.id;
@@ -20,6 +11,28 @@ module.exports = function(io) {
             io.emit('ui_update', { kioskId: data.kioskId, status: 'Online' });
         });
 
+        // Route Remote Shutdown
+        socket.on('ui_request_shutdown', (data) => {
+            const kioskSocketId = connectedKiosks[data.kioskId];
+            if (kioskSocketId) {
+                io.to(kioskSocketId).emit('shutdown_command');
+            } else {
+                socket.emit('ui_error', 'Cannot shutdown: Kiosk is offline');
+            }
+        });
+
+        // Route Remote Test Print
+        socket.on('ui_request_test_print', (data) => {
+            const kioskSocketId = connectedKiosks[data.kioskId];
+            if (kioskSocketId) {
+                console.log(`Sending test print to: ${data.kioskId}`);
+                io.to(kioskSocketId).emit('test_print_command');
+            } else {
+                socket.emit('ui_error', 'Cannot print: Kiosk is offline');
+            }
+        });
+
+        // Route Sync Poll
         socket.on('ui_request_poll', (data) => {
             const kioskSocketId = connectedKiosks[data.kioskId];
             if (kioskSocketId) {
@@ -29,8 +42,8 @@ module.exports = function(io) {
             }
         });
 
+        // Handle Sync Response
         socket.on('poll_response', (data) => {
-            // Calculate Today and Yesterday dynamically
             const todayObj = new Date();
             const today = todayObj.getFullYear() + '-' + String(todayObj.getMonth() + 1).padStart(2, '0') + '-' + String(todayObj.getDate()).padStart(2, '0');
             
@@ -45,7 +58,6 @@ module.exports = function(io) {
             if (data.logs) {
                 data.logs.forEach(log => {
                     const logDate = log.date; 
-                    
                     if (logDate === today) {
                         todayStats.pages += log.pages;
                         todayStats.revenue += log.amount;
@@ -53,7 +65,6 @@ module.exports = function(io) {
                         yesterdayStats.pages += log.pages;
                         yesterdayStats.revenue += log.amount;
                     }
-
                     if (!history[logDate]) history[logDate] = { pages: 0, revenue: 0 };
                     history[logDate].pages += log.pages;
                     history[logDate].revenue += log.amount;
@@ -65,14 +76,15 @@ module.exports = function(io) {
                 status: 'Online',
                 hardware: {
                     wifi: data.wifi ? 'Connected' : 'Disconnected',
-                    printer: data.printer ? 'Ready' : 'Offline'
+                    printer: data.printer ? 'Ready' : 'Offline',
+                    printer_details: data.printer_details // NEW: Raw Linux output
                 },
                 stats: {
                     today: todayStats,
                     yesterday: yesterdayStats,
                     history: history
                 },
-                excelFile: data.excel_file // Forward the file to the UI
+                excelFile: data.excel_file
             });
         });
 
