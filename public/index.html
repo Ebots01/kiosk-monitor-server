@@ -9,69 +9,95 @@
 </head>
 <body>
 
+    <!-- ===== Navbar ===== -->
     <nav class="navbar">
         <div class="logo-area">
             <i class="fa-solid fa-print"></i>
             <h1>OneTapPrint Monitor</h1>
         </div>
-        <div class="kiosk-id-badge">Target ID: <strong id="target-id-display">GGV_KIOSK_01</strong></div>
+        <div class="kiosk-id-badge">
+            Target: <strong id="target-id-display">—</strong>
+        </div>
     </nav>
 
+    <!-- ===== Dashboard ===== -->
     <div class="dashboard">
-        
+
+        <!-- Top Row: Status + Actions -->
         <div class="top-row">
+
+            <!-- Machine Status Card -->
             <div class="card status-card">
                 <div class="card-header">
                     <h2><i class="fa-solid fa-server"></i> Machine Status</h2>
                     <div id="kiosk-status" class="badge offline">Offline</div>
                 </div>
+
                 <div class="hardware-grid">
                     <div class="hw-item">
                         <i class="fa-solid fa-wifi text-blue"></i>
-                        <span>Wi-Fi:</span>
+                        <span>Wi-Fi</span>
                         <strong id="wifi-status">--</strong>
                     </div>
                     <div class="hw-item">
                         <i class="fa-solid fa-print text-purple"></i>
-                        <span>Printer App Status:</span>
+                        <span>Printer App</span>
                         <strong id="printer-status">--</strong>
                     </div>
                 </div>
 
                 <div class="printer-terminal">
-                    <h4><i class="fa-solid fa-terminal"></i> CUPS Hardware Diagnostics</h4>
+                    <h4>
+                        <i class="fa-solid fa-terminal"></i>
+                        CUPS Hardware Diagnostics
+                    </h4>
                     <pre id="printer-logs-display">Click 'Sync Data' to fetch deep hardware logs (Jams, Ink, Queue)...</pre>
                 </div>
-
             </div>
 
+            <!-- Quick Actions Card -->
             <div class="card action-card">
                 <h2><i class="fa-solid fa-bolt"></i> Quick Actions</h2>
+
                 <div class="action-buttons">
+
                     <button id="poll-btn" class="btn btn-primary" onclick="pollKiosk()">
                         <i class="fa-solid fa-arrows-rotate"></i> Sync Data
                     </button>
+
                     <button class="btn btn-warning" onclick="requestTestPrint()">
                         <i class="fa-solid fa-file-invoice"></i> Force Test Print
                     </button>
-                    <button id="download-btn" class="btn btn-success" onclick="downloadExcel()" disabled>
-                        <i class="fa-solid fa-file-excel"></i> Download Excel
-                    </button>
-                    <button id="shutdown-btn" class="btn btn-danger" onclick="requestShutdown()" style="background-color: #dc2626; margin-top: 10px;">
+
+                    <!-- Excel Download Group -->
+                    <div class="download-group">
+                        <select id="excel-date-selector" class="date-select" disabled>
+                            <option value="">Sync first...</option>
+                        </select>
+                        <button id="download-btn" class="btn btn-success" onclick="requestExcelDownload()" disabled>
+                            <i class="fa-solid fa-download"></i> Fetch &amp; Save
+                        </button>
+                    </div>
+
+                    <button id="shutdown-btn" class="btn btn-danger" onclick="requestShutdown()">
                         <i class="fa-solid fa-power-off"></i> Shut Down Kiosk
-                     </button>
+                    </button>
+
                 </div>
+
                 <p id="error-msg" class="error-text"></p>
             </div>
+
         </div>
 
+        <!-- Stats Row -->
         <div class="stats-row">
             <div class="card stat-card today">
                 <h3>Today</h3>
                 <div class="stat-content">
                     <div class="stat-item">
                         <i class="fa-solid fa-file-lines"></i>
-                        <span id="today-pages">0</span> Pages
+                        <span id="today-pages">0</span>&nbsp;Pages
                     </div>
                     <div class="stat-item highlight">
                         <i class="fa-solid fa-indian-rupee-sign"></i>
@@ -85,7 +111,7 @@
                 <div class="stat-content">
                     <div class="stat-item">
                         <i class="fa-solid fa-file-lines"></i>
-                        <span id="yesterday-pages">0</span> Pages
+                        <span id="yesterday-pages">0</span>&nbsp;Pages
                     </div>
                     <div class="stat-item highlight">
                         <i class="fa-solid fa-indian-rupee-sign"></i>
@@ -95,6 +121,7 @@
             </div>
         </div>
 
+        <!-- History Table -->
         <div class="card table-card">
             <h2><i class="fa-solid fa-clock-rotate-left"></i> Print History (Date-wise)</h2>
             <div class="table-responsive">
@@ -107,51 +134,68 @@
                         </tr>
                     </thead>
                     <tbody id="history-body">
-                        <tr><td colspan="3" class="empty-state">No data synced yet. Click 'Sync Data'.</td></tr>
+                        <tr>
+                            <td colspan="3" class="empty-state">
+                                No data synced yet. Click 'Sync Data'.
+                            </td>
+                        </tr>
                     </tbody>
                 </table>
             </div>
         </div>
 
-    </div>
+    </div><!-- /.dashboard -->
 
+    <!-- ===== Socket.IO + Dashboard Logic ===== -->
     <script src="/socket.io/socket.io.js"></script>
     <script>
-        const socket = io();
-        const targetKiosk = "csjmu_01"; 
+        const socket     = io();
+        const targetKiosk = 'csjmu_01';
+
+        // Show kiosk ID in navbar
         document.getElementById('target-id-display').innerText = targetKiosk;
 
-        let latestExcelBase64 = null;
+        /* ------------------------------------------------------------------ */
+        /*  Socket Events                                                       */
+        /* ------------------------------------------------------------------ */
 
-        socket.on('ui_update', (data) => {
+        // General connect / disconnect status
+        socket.on('ui_update_status', (data) => {
             if (data.kioskId !== targetKiosk) return;
-
-            // 1. Status Badge
             const statusEl = document.getElementById('kiosk-status');
             statusEl.innerText = data.status;
             statusEl.className = 'badge ' + data.status.toLowerCase();
-            
-            // 2. Hardware Info & Deep Logs
-            if(data.hardware) {
-                document.getElementById('wifi-status').innerText = data.hardware.wifi;
+        });
+
+        // Full dashboard sync (date: 'all')
+        socket.on('ui_update_dashboard', (data) => {
+            if (data.kioskId !== targetKiosk) return;
+
+            // Badge & hardware
+            const statusEl = document.getElementById('kiosk-status');
+            statusEl.innerText = data.status;
+            statusEl.className = 'badge ' + data.status.toLowerCase();
+
+            if (data.hardware) {
+                document.getElementById('wifi-status').innerText    = data.hardware.wifi;
                 document.getElementById('printer-status').innerText = data.hardware.printer;
-                if(data.hardware.printer_details) {
+                if (data.hardware.printer_details) {
                     document.getElementById('printer-logs-display').innerText = data.hardware.printer_details;
                 }
             }
 
-            // 3. Stats Update
-            if(data.stats) {
-                document.getElementById('today-pages').innerText = data.stats.today.pages;
-                document.getElementById('today-rev').innerText = data.stats.today.revenue.toFixed(2);
+            // Stats
+            if (data.stats) {
+                document.getElementById('today-pages').innerText     = data.stats.today.pages;
+                document.getElementById('today-rev').innerText       = data.stats.today.revenue.toFixed(2);
                 document.getElementById('yesterday-pages').innerText = data.stats.yesterday.pages;
-                document.getElementById('yesterday-rev').innerText = data.stats.yesterday.revenue.toFixed(2);
+                document.getElementById('yesterday-rev').innerText   = data.stats.yesterday.revenue.toFixed(2);
 
                 const tbody = document.getElementById('history-body');
                 tbody.innerHTML = '';
-                
+
                 const dates = Object.keys(data.stats.history).sort().reverse();
-                if(dates.length === 0) {
+                if (dates.length === 0) {
                     tbody.innerHTML = `<tr><td colspan="3" class="empty-state">No logs found on kiosk.</td></tr>`;
                 } else {
                     dates.forEach(date => {
@@ -167,56 +211,96 @@
                 }
             }
 
-            // 4. Excel File Storage
-            if(data.excelFile) {
-                latestExcelBase64 = data.excelFile;
-                document.getElementById('download-btn').disabled = false;
+            // Populate Excel date dropdown
+            const select   = document.getElementById('excel-date-selector');
+            const dlBtn    = document.getElementById('download-btn');
+
+            if (data.available_dates && data.available_dates.length > 0) {
+                select.innerHTML = '';
+                data.available_dates.forEach(date => {
+                    const option = document.createElement('option');
+                    option.value = date;
+                    option.text  = date;
+                    select.appendChild(option);
+                });
+                select.disabled = false;
+                dlBtn.disabled  = false;
+            } else {
+                select.innerHTML = '<option value="">No files found</option>';
+                select.disabled  = true;
+                dlBtn.disabled   = true;
             }
-            
+
+            // Reset poll button
             const pollBtn = document.getElementById('poll-btn');
             pollBtn.innerHTML = `<i class="fa-solid fa-arrows-rotate"></i> Sync Data`;
-            pollBtn.disabled = false;
+            pollBtn.disabled  = false;
             document.getElementById('error-msg').innerText = '';
         });
 
-        socket.on('ui_error', (msg) => {
-            const pollBtn = document.getElementById('poll-btn');
-            pollBtn.innerHTML = `<i class="fa-solid fa-arrows-rotate"></i> Sync Data`;
-            pollBtn.disabled = false;
-            document.getElementById('error-msg').innerText = msg;
-        });
+        // Specific-date Excel file is ready — trigger browser download
+        socket.on('ui_excel_ready', (data) => {
+            if (data.kioskId !== targetKiosk || !data.excelFile) return;
 
-        function requestShutdown() {
-            if (confirm("⚠️ WARNING: This will immediately turn off the Kiosk hardware. Proceed?")) {
-               socket.emit('ui_request_shutdown', { kioskId: targetKiosk });
-            }
-        }
-
-        // NEW: Test Print Trigger
-        function requestTestPrint() {
-            if (confirm("Send a remote test print to the Brother HL-2100?")) {
-               socket.emit('ui_request_test_print', { kioskId: targetKiosk });
-               alert("Test print command sent!");
-            }
-        }
-
-        function pollKiosk() {
-            const pollBtn = document.getElementById('poll-btn');
-            pollBtn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Fetching...`;
-            pollBtn.disabled = true;
-            document.getElementById('error-msg').innerText = '';
-            document.getElementById('printer-logs-display').innerText = 'Fetching deep hardware logs from CUPS...';
-            socket.emit('ui_request_poll', { kioskId: targetKiosk });
-        }
-
-        function downloadExcel() {
-            if(!latestExcelBase64) return;
-            const link = document.createElement('a');
-            link.href = 'data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,' + latestExcelBase64;
-            link.download = `Print_Logs_${targetKiosk}.xlsx`;
+            const link  = document.createElement('a');
+            link.href   = 'data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,' + data.excelFile;
+            link.download = `Print_Logs_${targetKiosk}_${data.date}.xlsx`;
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
+
+            const dlBtn   = document.getElementById('download-btn');
+            dlBtn.innerHTML = `<i class="fa-solid fa-download"></i> Fetch &amp; Save`;
+            dlBtn.disabled  = false;
+        });
+
+        // Error from server
+        socket.on('ui_error', (msg) => {
+            const pollBtn = document.getElementById('poll-btn');
+            pollBtn.innerHTML = `<i class="fa-solid fa-arrows-rotate"></i> Sync Data`;
+            pollBtn.disabled  = false;
+            document.getElementById('error-msg').innerText = msg;
+        });
+
+        /* ------------------------------------------------------------------ */
+        /*  Action Functions                                                    */
+        /* ------------------------------------------------------------------ */
+
+        function requestShutdown() {
+            if (confirm('⚠️ WARNING: This will immediately turn off the Kiosk hardware. Proceed?')) {
+                socket.emit('ui_request_shutdown', { kioskId: targetKiosk });
+            }
+        }
+
+        function requestTestPrint() {
+            if (confirm('Send a remote test print to the printer?')) {
+                socket.emit('ui_request_test_print', { kioskId: targetKiosk });
+                alert('Test print command sent!');
+            }
+        }
+
+        // Request ALL history to populate the dashboard
+        function pollKiosk() {
+            const pollBtn = document.getElementById('poll-btn');
+            pollBtn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Fetching...`;
+            pollBtn.disabled  = true;
+            document.getElementById('error-msg').innerText              = '';
+            document.getElementById('printer-logs-display').innerText   = 'Fetching deep hardware logs from CUPS...';
+
+            socket.emit('ui_request_poll', { kioskId: targetKiosk, date: 'all' });
+        }
+
+        // Request a specific date's Excel file
+        function requestExcelDownload() {
+            const select     = document.getElementById('excel-date-selector');
+            const targetDate = select.value;
+            if (!targetDate) return;
+
+            const dlBtn   = document.getElementById('download-btn');
+            dlBtn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Preparing...`;
+            dlBtn.disabled  = true;
+
+            socket.emit('ui_request_poll', { kioskId: targetKiosk, date: targetDate });
         }
     </script>
 </body>
