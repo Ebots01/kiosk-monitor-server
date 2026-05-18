@@ -9,24 +9,25 @@
 </head>
 <body>
 
-    <!-- ===== Navbar ===== -->
     <nav class="navbar">
         <div class="logo-area">
             <i class="fa-solid fa-print"></i>
             <h1>OneTapPrint Monitor</h1>
         </div>
-        <div class="kiosk-id-badge">
-            Target: <strong id="target-id-display">—</strong>
+        
+        <div class="kiosk-id-badge" style="display: flex; align-items: center; gap: 8px;">
+            Target: 
+            <select id="kiosk-selector" onchange="changeKiosk(this.value)" style="background: transparent; color: var(--accent-blue); border: none; font-family: var(--font-mono); font-size: 14px; font-weight: 600; cursor: pointer; outline: none;">
+                <option value="csjmu_01">csjmu_01</option>
+                <option value="csjmu_02">csjmu_02</option>
+            </select>
         </div>
     </nav>
 
-    <!-- ===== Dashboard ===== -->
     <div class="dashboard">
 
-        <!-- Top Row: Status + Actions -->
         <div class="top-row">
 
-            <!-- Machine Status Card -->
             <div class="card status-card">
                 <div class="card-header">
                     <h2><i class="fa-solid fa-server"></i> Machine Status</h2>
@@ -55,7 +56,6 @@
                 </div>
             </div>
 
-            <!-- Quick Actions Card -->
             <div class="card action-card">
                 <h2><i class="fa-solid fa-bolt"></i> Quick Actions</h2>
 
@@ -69,7 +69,6 @@
                         <i class="fa-solid fa-file-invoice"></i> Force Test Print
                     </button>
 
-                    <!-- Excel Download Group -->
                     <div class="download-group">
                         <select id="excel-date-selector" class="date-select" disabled>
                             <option value="">Sync first...</option>
@@ -90,7 +89,6 @@
 
         </div>
 
-        <!-- Stats Row -->
         <div class="stats-row">
             <div class="card stat-card today">
                 <h3>Today</h3>
@@ -121,7 +119,6 @@
             </div>
         </div>
 
-        <!-- History Table -->
         <div class="card table-card">
             <h2><i class="fa-solid fa-clock-rotate-left"></i> Print History (Date-wise)</h2>
             <div class="table-responsive">
@@ -144,19 +141,49 @@
             </div>
         </div>
 
-    </div><!-- /.dashboard -->
-
-    <!-- ===== Socket.IO + Dashboard Logic ===== -->
-    <script src="/socket.io/socket.io.js"></script>
+    </div><script src="/socket.io/socket.io.js"></script>
     <script>
-        const socket     = io();
-        const targetKiosk = 'csjmu_01';
-
-        // Show kiosk ID in navbar
-        document.getElementById('target-id-display').innerText = targetKiosk;
+        const socket = io();
+        
+        // DYNAMIC TARGET READ FROM DROPDOWN
+        let targetKiosk = document.getElementById('kiosk-selector').value;
 
         /* ------------------------------------------------------------------ */
-        /*  Socket Events                                                       */
+        /* Dropdown Kiosk Switcher                                             */
+        /* ------------------------------------------------------------------ */
+        function changeKiosk(newKioskId) {
+            targetKiosk = newKioskId;
+            
+            // Reset the UI visually before fetching new data
+            document.getElementById('kiosk-status').innerText = 'Switching...';
+            document.getElementById('kiosk-status').className = 'badge offline';
+            
+            // Clear stats to 0
+            document.getElementById('today-pages').innerText = '0';
+            document.getElementById('today-rev').innerText = '0.00';
+            document.getElementById('yesterday-pages').innerText = '0';
+            document.getElementById('yesterday-rev').innerText = '0.00';
+            
+            // Clear hardware
+            document.getElementById('wifi-status').innerText = '--';
+            document.getElementById('printer-status').innerText = '--';
+            document.getElementById('printer-logs-display').innerText = "Click 'Sync Data' to fetch deep hardware logs (Jams, Ink, Queue)...";
+            
+            // Clear history table
+            document.getElementById('history-body').innerHTML = `<tr><td colspan="3" class="empty-state">Loading data for ${targetKiosk}...</td></tr>`;
+            
+            // Disable Excel downloads until sync is done
+            const excelSelector = document.getElementById('excel-date-selector');
+            excelSelector.innerHTML = '<option value="">Sync first...</option>';
+            excelSelector.disabled = true;
+            document.getElementById('download-btn').disabled = true;
+
+            // Automatically poll the newly selected kiosk
+            pollKiosk();
+        }
+
+        /* ------------------------------------------------------------------ */
+        /* Socket Events                                                       */
         /* ------------------------------------------------------------------ */
 
         // General connect / disconnect status
@@ -263,17 +290,17 @@
         });
 
         /* ------------------------------------------------------------------ */
-        /*  Action Functions                                                    */
+        /* Action Functions                                                    */
         /* ------------------------------------------------------------------ */
 
         function requestShutdown() {
-            if (confirm('⚠️ WARNING: This will immediately turn off the Kiosk hardware. Proceed?')) {
+            if (confirm(`⚠️ WARNING: This will immediately turn off Kiosk [${targetKiosk}]. Proceed?`)) {
                 socket.emit('ui_request_shutdown', { kioskId: targetKiosk });
             }
         }
 
         function requestTestPrint() {
-            if (confirm('Send a remote test print to the printer?')) {
+            if (confirm(`Send a remote test print to [${targetKiosk}]?`)) {
                 socket.emit('ui_request_test_print', { kioskId: targetKiosk });
                 alert('Test print command sent!');
             }
