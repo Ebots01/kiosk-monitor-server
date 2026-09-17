@@ -296,6 +296,21 @@
         /* Action Functions                                                    */
         /* ------------------------------------------------------------------ */
 
+       // NEW FUNCTION ADDED HERE
+       function requestClearDownloads() {
+          if (confirm("Are you sure you want to delete all downloaded files from the server?")) {
+              fetch('/api/clear-downloads', { method: 'POST' })
+                  .then(response => {
+                     if(response.ok) alert("Downloads cleared successfully!");
+                     else alert("Failed to clear downloads.");
+                  })
+                 .catch(error => {
+                   console.error('Error:', error);
+                   alert("An error occurred while clearing downloads.");
+                });
+             }
+          }   
+ 
         function requestShutdown() {
             if (confirm(`⚠️ WARNING: This will immediately turn off Kiosk [${targetKiosk}]. Proceed?`)) {
                 socket.emit('ui_request_shutdown', { kioskId: targetKiosk });
