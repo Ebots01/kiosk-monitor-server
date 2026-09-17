@@ -33,6 +33,17 @@ module.exports = function (io) {
             }
         });
 
+        // --- Route Clear Downloads (NEW) ---
+        socket.on('ui_request_clear_downloads', (data) => {
+            const kioskSocketId = connectedKiosks[data.kioskId];
+            if (kioskSocketId) {
+                console.log(`Sending clear downloads command to: ${data.kioskId}`);
+                io.to(kioskSocketId).emit('kiosk_execute_clear_downloads');
+            } else {
+                socket.emit('ui_error', 'Cannot clear downloads: Kiosk is offline');
+            }
+        });
+
         // --- Route Sync Poll (accepts optional date parameter) ---
         socket.on('ui_request_poll', (data) => {
             const kioskSocketId = connectedKiosks[data.kioskId];
