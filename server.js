@@ -15,7 +15,7 @@ app.use(express.static('public')); // Serve the frontend dashboard
 // Added Endpoint to clear downloads
 app.post('/api/clear-downloads', (req, res) => {
     // Replace with the actual absolute path to the Linux downloads folder
-    const downloadDir = '/home/username/Downloads'; 
+    const downloadDir = '/home/abhay/Downloads'; 
 
     fs.readdir(downloadDir, (err, files) => {
         if (err) {
